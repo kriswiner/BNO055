@@ -3,7 +3,7 @@ BNO-055
 
 ![bno055front](https://cloud.githubusercontent.com/assets/6698410/4856912/7c5917ac-60c5-11e4-9ae3-fc3aa26945e6.jpg)
 
-Teensiduino sketch for 9-axis BNO-055 motion sensor + MS5637 pressure sensor
+Teensiduino sketch for 9-axis BNO-055 motion sensor + MS5637 pressure sensor add-on shield for Teensy 3.1 available from [Tindie.com](https://www.tindie.com/products/onehorse/bno-055-9-axis-motion-sensor-with-hardware-sensor-fusion/).
 
 Basic sketch to configure the sensors and get scaled accelerometer, gyroscope, and magnetometer data from the BNO-055 9-axis motion sensor and MS5637 pressure sensor. 
 
