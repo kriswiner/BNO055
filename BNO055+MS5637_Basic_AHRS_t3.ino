@@ -26,7 +26,7 @@
  
  All sensors communicate via I2C at 400 Hz or higher.
  SDA and SCL should have external pull-up resistors (to 3.3V).
- 4K7 resistors are on the BNO055_LIS3MDL_MS5637 breakout board.
+ 4K7 resistors are on the BNO055_MS5637 breakout board.
  
  Hardware setup:
  Breakout Board --------- Arduino/Teensy
@@ -184,7 +184,7 @@ Adafruit_PCD8544 display = Adafruit_PCD8544(7, 6, 5, 3, 4);
 #define BNO055_GYR_AM_SET       0x1F
 
 
-// Using the BNO055_LIS3MDL_MS5637 breakout board/Teensy 3.1 Add-On Shield, ADO is set to 0 
+// Using the BNO055_MS5637 breakout board/Teensy 3.1 Add-On Shield, ADO is set to 1 by default 
 #define ADO 1
 #if ADO
 #define BNO055_ADDRESS 0x29   //  Device address of BNO055 when ADO = 1
@@ -323,12 +323,12 @@ uint8_t APwrMode = Normal;    // Accel power mode
 uint8_t Abw = ABW_31_25Hz;    // Accel bandwidth, accel sample rate divided by ABW_divx
 //
 //uint8_t Mscale = MFS_4Gauss;  // Select magnetometer full-scale resolution
-uint8_t MOpMode = Regular;    // Select magnetometer perfomance mode
+uint8_t MOpMode = HighAccuracy;    // Select magnetometer perfomance mode
 uint8_t MPwrMode = Normal;    // Select magnetometer power mode
 uint8_t Modr = MODR_10Hz;     // Select magnetometer ODR when in BNO055 bypass mode
 
 uint8_t PWRMode = Normal ;    // Select BNO055 power mode
-uint8_t OPRMode = AMG;        // specify operation mode for sensors
+uint8_t OPRMode = NDOF;        // specify operation mode for sensors
 uint8_t status;               // BNO055 data status register
 float aRes, gRes, mRes;       // scale resolutions per LSB for the sensors
   
@@ -343,6 +343,8 @@ double dT, OFFSET, SENS, T2, OFFSET2, SENS2;  // First order and second order co
 int16_t accelCount[3];  // Stores the 16-bit signed accelerometer sensor output
 int16_t gyroCount[3];   // Stores the 16-bit signed gyro sensor output
 int16_t magCount[3];    // Stores the 16-bit signed magnetometer sensor output
+int16_t quatCount[4];   // Stores the 16-bit signed quaternion output
+int16_t EulCount[3];    // Stores the 16-bit signed Euler angle output
 float magCalibration[3] = {0, 0, 0}, magbias[3] = {0, 0, 0};  // Factory mag calibration and mag bias
 float gyroBias[3] = {0, 0, 0}, accelBias[3] = {0, 0, 0};      // Bias corrections for gyro and accelerometer
 int16_t tempGCount, tempMCount;      // temperature raw count output of mag and gyro
@@ -368,12 +370,14 @@ float zeta = sqrt(3.0f / 4.0f) * GyroMeasDrift;   // compute zeta, the other fre
 
 uint32_t delt_t = 0, count = 0, sumCount = 0;  // used to control display output rate
 float pitch, yaw, roll;
+float Pitch, Yaw, Roll;
 float deltat = 0.0f, sum = 0.0f;          // integration interval for both filter schemes
 uint32_t lastUpdate = 0, firstUpdate = 0; // used to calculate integration interval
 uint32_t Now = 0;                         // used to calculate integration interval
 
 float ax, ay, az, gx, gy, gz, mx, my, mz; // variables to hold latest sensor data values 
 float q[4] = {1.0f, 0.0f, 0.0f, 0.0f};    // vector to hold quaternion
+float quat[4] = {1.0f, 0.0f, 0.0f, 0.0f};    // vector to hold quaternion
 float eInt[3] = {0.0f, 0.0f, 0.0f};       // vector to hold integral error for Mahony method
 
 
@@ -509,56 +513,38 @@ void setup()
     // Check software revision ID
     byte swlsb = readByte(BNO055_ADDRESS, BNO055_SW_REV_ID_LSB);
     byte swmsb = readByte(BNO055_ADDRESS, BNO055_SW_REV_ID_MSB);
-    int16_t swid = (int16_t) ((int16_t) swmsb << 8 | swlsb);
-    Serial.print("BNO055 SW Revision ID "); Serial.println(swid); 
-
+    Serial.print("BNO055 SW Revision ID: "); Serial.print(swmsb, HEX); Serial.print("  "); Serial.println(swlsb, HEX); 
     
     // Check bootloader version
     byte blid = readByte(BNO055_ADDRESS, BNO055_BL_REV_ID);
-    Serial.print("BNO055 bootloader Version "); Serial.println(blid); 
+    Serial.print("BNO055 bootloader Version: "); Serial.println(blid); 
     
-    // Select BNO-055 operating mode (default is config mode where all sensors and sensor fusion are off)
-//    initBNO055();
-   
-
-/*    
-    selftestBNO055(SelfTest); // Start by performing self test and reporting values
-    Serial.print("x-axis self test +: gyration : "); Serial.print(SelfTest[0], 2); Serial.println(" should be +55");
-    Serial.print("y-axis self test +: gyration : "); Serial.print(SelfTest[1], 2); Serial.println(" should be +55");
-    Serial.print("z-axis self test +: gyration : "); Serial.print(SelfTest[2], 2); Serial.println(" should be +55");
-    Serial.print("x-axis self test -: gyration : "); Serial.print(SelfTest[3], 2); Serial.println(" should be -55");
-    Serial.print("y-axis self test -: gyration : "); Serial.print(SelfTest[4], 2); Serial.println(" should be -55");
-    Serial.print("z-axis self test -: gyration : "); Serial.print(SelfTest[5], 2); Serial.println(" should be -55");
-    Serial.print("x-axis self test +: acceleration : "); Serial.print(1000.*SelfTest[6]); Serial.println(" should be +300 mg");
-    Serial.print("y-axis self test +: acceleration : "); Serial.print(1000.*SelfTest[7]); Serial.println(" should be +300 mg");
-    Serial.print("z-axis self test +: acceleration : "); Serial.print(1000.*SelfTest[8]); Serial.println(" should be +300 mg");
-    Serial.print("x-axis self test -: acceleration : "); Serial.print(1000.*SelfTest[9]); Serial.println(" should be -300 mg");
-    Serial.print("y-axis self test -: acceleration : "); Serial.print(1000.*SelfTest[10]); Serial.println(" should be -300 mg");
-    Serial.print("z-axis self test -: acceleration : "); Serial.print(1000.*SelfTest[11]); Serial.println(" should be -300 mg");
+    // Check self-test results
+    byte selftest = readByte(BNO055_ADDRESS, BNO055_ST_RESULT);
+    
+    if(selftest & 0x01) {
+      Serial.println("accelerometer passed selftest"); 
+    } else {
+      Serial.println("accelerometer failed selftest"); 
+    }
+    if(selftest & 0x02) {
+      Serial.println("magnetometer passed selftest"); 
+    } else {
+      Serial.println("magnetometer failed selftest"); 
+    }  
+    if(selftest & 0x04) {
+      Serial.println("gyroscope passed selftest"); 
+    } else {
+      Serial.println("gyroscope failed selftest"); 
+    }      
+    if(selftest & 0x08) {
+      Serial.println("MCU passed selftest"); 
+    } else {
+      Serial.println("MCU failed selftest"); 
+    }
+      
     delay(1000);
-    
-  calibrateBNO055(gyroBias, accelBias); // Calibrate gyro and accelerometers, load biases in bias registers
-  Serial.println(1000*accelBias[0]);  Serial.println(1000*accelBias[1]);  Serial.print(1000*accelBias[2]); Serial.println(" mg");
-  Serial.println(gyroBias[0]);  Serial.println(gyroBias[1]);  Serial.print(gyroBias[2]); Serial.println(" dps");
-
-  display.clearDisplay();
-     
-  display.setCursor(0, 0); display.print("MAX2110 bias");
-  display.setCursor(0, 8); display.print(" x   y   z  ");
-
-  display.setCursor(0,  16); display.print((int)(1000*accelBias[0])); 
-  display.setCursor(24, 16); display.print((int)(1000*accelBias[1])); 
-  display.setCursor(48, 16); display.print((int)(1000*accelBias[2])); 
-  display.setCursor(72, 16); display.print("mg");
-    
-  display.setCursor(0,  24); display.print(gyroBias[0], 1); 
-  display.setCursor(24, 24); display.print(gyroBias[1], 1); 
-  display.setCursor(48, 24); display.print(gyroBias[2], 1); 
-  display.setCursor(72, 24); display.print("dp");   
- 
-  display.display();
-  delay(1000); 
-*/
+  
   // Reset the MS5637 pressure sensor
   MS5637Reset();
   delay(100);
@@ -584,13 +570,12 @@ void setup()
   display.setCursor(0,20); display.print("Should be "); display.setCursor(50,30); display.print(refCRC);
   display.display();
   delay(1000);  
+ 
+  calibrateBNO055(accelBias, gyroBias);
+  
+  Serial.println("Average accelerometer bias (mg) = "); Serial.println(accelBias[0]); Serial.println(accelBias[1]); Serial.println(accelBias[2]);
+  Serial.println("Average gyro bias (dps) = "); Serial.println(gyroBias[0]); Serial.println(gyroBias[1]); Serial.println(gyroBias[2]);
 
-  
-  initBNO055(); // Initialize the BNO055
-  Serial.println("BNO055 initialized for sensor mode...."); // Initialize BNO055 for sensor read 
-  
-  calibrateBNO055();
-  
   // Check calibration status of the sensors
   uint8_t calstat = readByte(BNO055_ADDRESS, BNO055_CALIB_STAT);
   Serial.println("Not calibrated = 0, fully calibrated = 3");
@@ -598,6 +583,28 @@ void setup()
   Serial.print("Gyro   calibration status "); Serial.println( (0x30 & calstat) >> 4);
   Serial.print("Accel  calibration status "); Serial.println( (0x0C & calstat) >> 2);
   Serial.print("Mag    calibration status "); Serial.println( (0x03 & calstat) >> 0);
+
+  display.clearDisplay();
+     
+  display.setCursor(0, 0); display.print("BNO055 bias");
+  display.setCursor(0, 8); display.print(" x   y   z  ");
+
+  display.setCursor(0,  16); display.print((int)(accelBias[0])); 
+  display.setCursor(24, 16); display.print((int)(accelBias[1])); 
+  display.setCursor(48, 16); display.print((int)(accelBias[2])); 
+  display.setCursor(72, 16); display.print("mg");
+    
+  display.setCursor(0,  24); display.print(gyroBias[0], 1); 
+  display.setCursor(24, 24); display.print(gyroBias[1], 1); 
+  display.setCursor(48, 24); display.print(gyroBias[2], 1); 
+  display.setCursor(72, 24); display.print("dps");   
+ 
+  display.display();
+  delay(1000); 
+  
+  initBNO055(); // Initialize the BNO055
+  Serial.println("BNO055 initialized for sensor mode...."); // Initialize BNO055 for sensor read 
+ 
   }
   else
   {
@@ -610,22 +617,36 @@ void setup()
 void loop()
 {  
     readAccelData(accelCount);  // Read the x/y/z adc values
-    // Now we'll calculate the accleration value into actual g's
-    ax = (float)accelCount[0];  // get actual g value, this depends on scale being set
-    ay = (float)accelCount[1];   
-    az = (float)accelCount[2]; 
+    // Now we'll calculate the accleration value into actual mg's
+    ax = (float)accelCount[0] - accelBias[0];  // subtract off calculated accel bias
+    ay = (float)accelCount[1] - accelBias[1];
+    az = (float)accelCount[2] - accelBias[2]; 
 
     readGyroData(gyroCount);  // Read the x/y/z adc values
     // Calculate the gyro value into actual degrees per second
-    gx = (float)gyroCount[0];  // get actual gyro value, this depends on scale being set
-    gy = (float)gyroCount[1];  
-    gz = (float)gyroCount[2];   
+    gx = (float)gyroCount[0]/16. - gyroBias[0];  // subtract off calculated gyro bias
+    gy = (float)gyroCount[1]/16. - gyroBias[1];  
+    gz = (float)gyroCount[2]/16. - gyroBias[2];   
 
     readMagData(magCount);  // Read the x/y/z adc values   
     // Calculate the magnetometer values in milliGauss
-    mx = (float)magCount[0];  // get actual magnetometer value, this depends on scale being set
-    my = (float)magCount[1];  
-    mz = (float)magCount[2];   
+    mx = (float)magCount[0]/1.6;  // get actual magnetometer value in mGauss 
+    my = (float)magCount[1]/1.6;  
+    mz = (float)magCount[2]/1.6;   
+    
+    readQuatData(quatCount);  // Read the x/y/z adc values   
+    // Calculate the quaternion values  
+    quat[0] = (float)(quatCount[0])/16384.;    
+    quat[1] = (float)(quatCount[1])/16384.;  
+    quat[2] = (float)(quatCount[2])/16384.;   
+    quat[3] = (float)(quatCount[3])/16384.;   
+    
+    readEulData(EulCount);  // Read the x/y/z adc values   
+    // Calculate the Euler angles values in degrees
+    Yaw = (float)EulCount[0]/16.;  
+    Roll = (float)EulCount[1]/16.;  
+    Pitch = (float)EulCount[2]/16.;   
+    
   
   Now = micros();
   deltat = ((Now - lastUpdate)/1000000.0f); // set integration time by time elapsed since last filter update
@@ -634,16 +655,14 @@ void loop()
   sum += deltat; // sum for averaging filter update rate
   sumCount++;
   
-  // Sensors x (y)-axis of the accelerometer opposite the y (x)-axis of the magnetometer;
-  // the magnetometer z-axis (+ up) is the same as the z-axis (+ up) of accelerometer and gyro!
-  // We have to make some allowance for this orientation mismatch in feeding the output to the quaternion filter.
-  // For the BNO055 + LIS3MDL, we have chosen a magnetic rotation that keeps the sensor forward along the x-axis just like
-  // in the LSM9DS0 sensor. This rotation can be modified to allow any convenient orientation convention.
+  // Sensors x, y, and z-axes  for the three sensor: accel, gyro, and magnetometer are all aligned, so
+  // no allowance for any orientation mismatch in feeding the output to the quaternion filter is required.
+  // For the BNO055, the sensor forward is along the x-axis just like
+  // in the LSM9DS0 and MPU9250 sensors. This rotation can be modified to allow any convenient orientation convention.
   // This is ok by aircraft orientation standards!  
   // Pass gyro rate as rad/s
-  MadgwickQuaternionUpdate(ax, ay, az, gx*PI/180.0f, gy*PI/180.0f, gz*PI/180.0f,  -mx,  -my,  -mz);
-//  MahonyQuaternionUpdate(ax, ay, az, gx*PI/180.0f, gy*PI/180.0f, gz*PI/180.0f, -mx, -my, -mz);
-  //  BNO055Quaternion();  // The BNO055 does 9 DoF sensor fusion in hardware!
+  MadgwickQuaternionUpdate(ax, ay, az, gx*PI/180.0f, gy*PI/180.0f, gz*PI/180.0f,  mx,  my,  mz);
+//  MahonyQuaternionUpdate(ax, ay, az, gx*PI/180.0f, gy*PI/180.0f, gz*PI/180.0f, mx, my, mz);
     
     // Serial print and/or display at 0.5 s rate independent of data rates
     delt_t = millis() - count;
@@ -660,10 +679,14 @@ void loop()
     Serial.print(" my = "); Serial.print( (int)my ); 
     Serial.print(" mz = "); Serial.print( (int)mz ); Serial.println(" mG");
     
-    Serial.print("q0 = "); Serial.print(q[0]);
-    Serial.print(" qx = "); Serial.print(q[1]); 
-    Serial.print(" qy = "); Serial.print(q[2]); 
-    Serial.print(" qz = "); Serial.println(q[3]); 
+    Serial.print("qx = "); Serial.print(q[0]);
+    Serial.print(" qy = "); Serial.print(q[1]); 
+    Serial.print(" qz = "); Serial.print(q[2]); 
+    Serial.print(" qw = "); Serial.println(q[3]); 
+    Serial.print("quatw = "); Serial.print(quat[0]);
+    Serial.print(" quatx = "); Serial.print(quat[1]); 
+    Serial.print(" quaty = "); Serial.print(quat[2]); 
+    Serial.print(" quatz = "); Serial.println(quat[3]); 
     } 
     
     tempGCount = readGyroTempData();  // Read the gyro adc values
@@ -748,12 +771,20 @@ void loop()
     roll  *= 180.0f / PI;
      
     if(SerialDebug) {
-    Serial.print("Yaw, Pitch, Roll: ");
+    Serial.print("Software Yaw, Pitch, Roll: ");
     Serial.print(yaw, 2);
     Serial.print(", ");
     Serial.print(pitch, 2);
     Serial.print(", ");
     Serial.println(roll, 2);
+    
+    Serial.print("Hardware Yaw, Pitch, Roll: ");
+    Serial.print(Yaw, 2);
+    Serial.print(", ");
+    Serial.print(Pitch, 2);
+    Serial.print(", ");
+    Serial.println(Roll, 2);
+ 
     
     Serial.print("rate = "); Serial.print((float)sumCount/sum, 2); Serial.println(" Hz");
     }
@@ -842,7 +873,25 @@ void readMagData(int16_t * destination)
   destination[0] = ((int16_t)rawData[1] << 8) | rawData[0] ;       // Turn the MSB and LSB into a signed 16-bit value
   destination[1] = ((int16_t)rawData[3] << 8) | rawData[2] ;  
   destination[2] = ((int16_t)rawData[5] << 8) | rawData[4] ;
+}
 
+void readQuatData(int16_t * destination)
+{
+  uint8_t rawData[8];  // x/y/z gyro register data stored here
+  readBytes(BNO055_ADDRESS, BNO055_QUA_DATA_W_LSB, 8, &rawData[0]);  // Read the six raw data registers sequentially into data array
+  destination[0] = ((int16_t)rawData[1] << 8) | rawData[0] ;       // Turn the MSB and LSB into a signed 16-bit value
+  destination[1] = ((int16_t)rawData[3] << 8) | rawData[2] ;  
+  destination[2] = ((int16_t)rawData[5] << 8) | rawData[4] ;
+  destination[3] = ((int16_t)rawData[7] << 8) | rawData[6] ;
+}
+
+void readEulData(int16_t * destination)
+{
+  uint8_t rawData[6];  // x/y/z gyro register data stored here
+  readBytes(BNO055_ADDRESS, BNO055_EUL_HEADING_LSB, 6, &rawData[0]);  // Read the six raw data registers sequentially into data array
+  destination[0] = ((int16_t)rawData[1] << 8) | rawData[0] ;       // Turn the MSB and LSB into a signed 16-bit value
+  destination[1] = ((int16_t)rawData[3] << 8) | rawData[2] ;  
+  destination[2] = ((int16_t)rawData[5] << 8) | rawData[4] ;
 }
 
 void initBNO055() {
@@ -869,15 +918,17 @@ void initBNO055() {
    writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, OPRMode );
 }
 
-void calibrateBNO055() {
-  
+void calibrateBNO055(float * dest1, float * dest2) 
+{
   uint8_t data[6]; // data array to hold accelerometer and gyro x, y, z, data
   uint16_t ii = 0, sample_count = 0;
   int32_t gyro_bias[3]  = {0, 0, 0}, accel_bias[3] = {0, 0, 0};
  
   // Select page 0 to read sensors
    writeByte(BNO055_ADDRESS, BNO055_PAGE_ID, 0x00);
-
+   // Select BNO055 system operation mode as NDOF for calibration
+   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, NDOF );
+   
    sample_count = 256;
    for(ii = 0; ii < sample_count; ii++) {
     int16_t accel_temp[3] = {0, 0, 0};
@@ -888,18 +939,42 @@ void calibrateBNO055() {
     accel_bias[0]  += (int32_t) accel_temp[0];
     accel_bias[1]  += (int32_t) accel_temp[1];
     accel_bias[2]  += (int32_t) accel_temp[2];
+    delay(5);
    }
-    accel_bias[0]  /= (int32_t) sample_count;  // get average accel bias
+    accel_bias[0]  /= (int32_t) sample_count;  // get average accel bias in mg
     accel_bias[1]  /= (int32_t) sample_count;
     accel_bias[2]  /= (int32_t) sample_count;
-          
+    
   if(accel_bias[2] > 0L) {accel_bias[2] -= (int32_t) 1000;}  // Remove gravity from the z-axis accelerometer bias calculation
   else {accel_bias[2] += (int32_t) 1000;}
-  
-  Serial.println("Average accelerometer bias = "); Serial.println(accel_bias[0]); Serial.println(accel_bias[1]); Serial.println(accel_bias[2]);
+
+    dest1[0] = (float) accel_bias[0];  // save accel biases in mg for use in main program
+    dest1[1] = (float) accel_bias[1];
+    dest1[2] = (float) accel_bias[2];          
+
+   for(ii = 0; ii < sample_count; ii++) {
+    int16_t gyro_temp[3] = {0, 0, 0};
+    readBytes(BNO055_ADDRESS, BNO055_GYR_DATA_X_LSB, 6, &data[0]);  // Read the six raw data registers into data array
+    gyro_temp[0] = (int16_t) (((int16_t)data[1] << 8) | data[0]) ; // Form signed 16-bit integer for each sample in FIFO
+    gyro_temp[1] = (int16_t) (((int16_t)data[3] << 8) | data[2]) ;
+    gyro_temp[2] = (int16_t) (((int16_t)data[5] << 8) | data[4]) ;
+    gyro_bias[0]  += (int32_t) gyro_temp[0];
+    gyro_bias[1]  += (int32_t) gyro_temp[1];
+    gyro_bias[2]  += (int32_t) gyro_temp[2];
+    delay(5);
+   }
+    gyro_bias[0]  /= (int32_t) sample_count;  // get average gyro bias in counts
+    gyro_bias[1]  /= (int32_t) sample_count;
+    gyro_bias[2]  /= (int32_t) sample_count;
+ 
+    dest2[0] = (float) gyro_bias[0] / 16.;  // save gyro biases in dps for use in main program
+    dest2[1] = (float) gyro_bias[1] / 16.;
+    dest2[2] = (float) gyro_bias[2] / 16.;          
 
   // Return to config mode to write accelerometer biases in offset register
+  // This offset register is only used while in fusion mode when accelerometer full-scale is +/- 4g
   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, CONFIGMODE );
+  
   //write biases to accelerometer offset registers
   writeByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_X_LSB, (int16_t)accel_bias[0] & 0xFF);
   writeByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_X_MSB, ((int16_t)accel_bias[0] >> 8) & 0xFF);
@@ -907,14 +982,29 @@ void calibrateBNO055() {
   writeByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Y_MSB, ((int16_t)accel_bias[1] >> 8) & 0xFF);
   writeByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Z_LSB, (int16_t)accel_bias[2] & 0xFF);
   writeByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Z_MSB, ((int16_t)accel_bias[2] >> 8) & 0xFF);
+ 
+  // Check that offsets were properly written to offset registers
+  Serial.println("Average accelerometer bias = "); 
+  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_X_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_X_LSB))); 
+  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Y_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Y_LSB))); 
+  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Z_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Z_LSB)));
 
+   //write biases to gyro offset registers
+  writeByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_X_LSB, (int16_t)gyro_bias[0] & 0xFF);
+  writeByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_X_MSB, ((int16_t)gyro_bias[0] >> 8) & 0xFF);
+  writeByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_Y_LSB, (int16_t)gyro_bias[1] & 0xFF);
+  writeByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_Y_MSB, ((int16_t)gyro_bias[1] >> 8) & 0xFF);
+  writeByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_Z_LSB, (int16_t)gyro_bias[2] & 0xFF);
+  writeByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_Z_MSB, ((int16_t)gyro_bias[2] >> 8) & 0xFF);
+  
   // Select BNO055 system operation mode
   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, OPRMode );
- 
-  Serial.println("Average accelerometer bias = "); 
-  Serial.println((int16_t)readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_X_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_X_LSB)); 
-  Serial.println((int16_t)readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Y_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Y_LSB)); 
-  Serial.println((int16_t)readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Z_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Z_LSB));
+
+ // Check that offsets were properly written to offset registers
+  Serial.println("Average gyro bias = "); 
+  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_X_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_X_LSB))); 
+  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_Y_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_Y_LSB))); 
+  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_Z_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_Z_LSB)));
 
 }
 
@@ -1035,3 +1125,4 @@ unsigned char MS5637checkCRC(uint16_t * n_prom)  // calculate checksum from PROM
 	while (Wire.available()) {
         dest[i++] = Wire.read(); }         // Put read results in the Rx buffer
 }
+
