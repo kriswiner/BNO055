@@ -201,7 +201,7 @@ enum Ascale {  // ACC Full Scale
   AFS_2G = 0,
   AFS_4G,
   AFS_8G,
-  AFS_18G
+  AFS_16G
 };
 
 enum Abw { // ACC Bandwidth
@@ -312,22 +312,22 @@ enum MPwrMode { // MAG power mode
 // Specify sensor configuration
 uint8_t OSR = ADC_8192;       // set pressure amd temperature oversample rate
 //
-uint8_t GPwrMode = Normal;    // Gyro power mode
+uint8_t GPwrMode = NormalG;    // Gyro power mode
 uint8_t Gscale = GFS_250DPS;  // Gyro full scale
 //uint8_t Godr = GODR_250Hz;    // Gyro sample rate
 uint8_t Gbw = GBW_23Hz;       // Gyro bandwidth
 //
 uint8_t Ascale = AFS_2G;      // Accel full scale
 //uint8_t Aodr = AODR_250Hz;    // Accel sample rate
-uint8_t APwrMode = Normal;    // Accel power mode
+uint8_t APwrMode = NormalA;    // Accel power mode
 uint8_t Abw = ABW_31_25Hz;    // Accel bandwidth, accel sample rate divided by ABW_divx
 //
 //uint8_t Mscale = MFS_4Gauss;  // Select magnetometer full-scale resolution
 uint8_t MOpMode = HighAccuracy;    // Select magnetometer perfomance mode
 uint8_t MPwrMode = Normal;    // Select magnetometer power mode
-uint8_t Modr = MODR_10Hz;     // Select magnetometer ODR when in BNO055 bypass mode
+uint8_t Modr = MODR_20Hz;     // Select magnetometer ODR when in BNO055 bypass mode
 
-uint8_t PWRMode = Normal ;    // Select BNO055 power mode
+uint8_t PWRMode = Normalpwr ;    // Select BNO055 power mode
 uint8_t OPRMode = NDOF;        // specify operation mode for sensors
 uint8_t status;               // BNO055 data status register
 float aRes, gRes, mRes;       // scale resolutions per LSB for the sensors
@@ -961,6 +961,9 @@ void readGRVData(int16_t * destination)
 }
 
 void initBNO055() {
+   // Select BNO055 system operation mode as CONFIGMODE to configure registers
+   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, CONFIGMODE );
+   
    // Select page 1 to configure sensors
    writeByte(BNO055_ADDRESS, BNO055_PAGE_ID, 0x01);
    // Configure ACC
