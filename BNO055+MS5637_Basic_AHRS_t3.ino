@@ -188,10 +188,10 @@ Adafruit_PCD8544 display = Adafruit_PCD8544(7, 6, 5, 3, 4);
 #define ADO 1
 #if ADO
 #define BNO055_ADDRESS 0x29   //  Device address of BNO055 when ADO = 1
-#define MS5637_ADDRESS   0x76   //  Address of MS5637 altimeter
+#define MS5637_ADDRESS 0x76   //  Address of MS5637 altimeter
 #else
 #define BNO055_ADDRESS 0x28   //  Device address of BNO055 when ADO = 0
-#define MS5637_ADDRESS   0x76   //  Address of MS5637 altimeter
+#define MS5637_ADDRESS 0x76   //  Address of MS5637 altimeter
 #endif  
 
 #define SerialDebug true      // set to true to get Serial output for debugging
@@ -201,7 +201,7 @@ enum Ascale {  // ACC Full Scale
   AFS_2G = 0,
   AFS_4G,
   AFS_8G,
-  AFS_16G
+  AFS_18G
 };
 
 enum Abw { // ACC Bandwidth
@@ -323,12 +323,12 @@ uint8_t APwrMode = NormalA;    // Accel power mode
 uint8_t Abw = ABW_31_25Hz;    // Accel bandwidth, accel sample rate divided by ABW_divx
 //
 //uint8_t Mscale = MFS_4Gauss;  // Select magnetometer full-scale resolution
-uint8_t MOpMode = HighAccuracy;    // Select magnetometer perfomance mode
+uint8_t MOpMode = Regular;    // Select magnetometer perfomance mode
 uint8_t MPwrMode = Normal;    // Select magnetometer power mode
-uint8_t Modr = MODR_20Hz;     // Select magnetometer ODR when in BNO055 bypass mode
+uint8_t Modr = MODR_10Hz;     // Select magnetometer ODR when in BNO055 bypass mode
 
 uint8_t PWRMode = Normalpwr ;    // Select BNO055 power mode
-uint8_t OPRMode = NDOF;        // specify operation mode for sensors
+uint8_t OPRMode = NDOF;       // specify operation mode for sensors
 uint8_t status;               // BNO055 data status register
 float aRes, gRes, mRes;       // scale resolutions per LSB for the sensors
   
@@ -415,46 +415,7 @@ void setup()
   display.setTextColor(BLACK); // Set pixel color; 1 on the monochrome screen
   display.clearDisplay();   // clears the screen and buffer
 
-/*
-// scan for i2c devices
-  byte error, address;
-  int nDevices;
-
-  Serial.println("Scanning...");
-
-  nDevices = 0;
-  for(address = 1; address < 127; address++ ) 
-  {
-    // The i2c_scanner uses the return value of
-    // the Write.endTransmisstion to see if
-    // a device did acknowledge to the address.
-    Wire.beginTransmission(address);
-    error = Wire.endTransmission();
-
-    if (error == 0)
-    {
-      Serial.print("I2C device found at address 0x");
-      if (address<16) 
-        Serial.print("0");
-      Serial.print(address,HEX);
-      Serial.println("  !");
-
-      nDevices++;
-    }
-    else if (error==4) 
-    {
-      Serial.print("Unknow error at address 0x");
-      if (address<16) 
-        Serial.print("0");
-      Serial.println(address,HEX);
-    }    
-  }
-  if (nDevices == 0)
-    Serial.println("No I2C devices found\n");
-  else
-    Serial.println("done\n");
- 
-  */
+  I2Cscan(); // check for I2C devices on the bus8
   
   // Read the WHO_AM_I register, this is a good test of communication
   Serial.println("BNO055 9-axis motion sensor...");
@@ -639,21 +600,21 @@ void loop()
 {  
     readAccelData(accelCount);  // Read the x/y/z adc values
     // Now we'll calculate the accleration value into actual mg's
-    ax = (float)accelCount[0] - accelBias[0];  // subtract off calculated accel bias
-    ay = (float)accelCount[1] - accelBias[1];
-    az = (float)accelCount[2] - accelBias[2]; 
+    ax = (float)accelCount[0]; // - accelBias[0];  // subtract off calculated accel bias
+    ay = (float)accelCount[1]; // - accelBias[1];
+    az = (float)accelCount[2]; // - accelBias[2]; 
 
     readGyroData(gyroCount);  // Read the x/y/z adc values
     // Calculate the gyro value into actual degrees per second
-    gx = (float)gyroCount[0]/16. - gyroBias[0];  // subtract off calculated gyro bias
-    gy = (float)gyroCount[1]/16. - gyroBias[1];  
-    gz = (float)gyroCount[2]/16. - gyroBias[2];   
+    gx = (float)gyroCount[0]/16.; // - gyroBias[0];  // subtract off calculated gyro bias
+    gy = (float)gyroCount[1]/16.; // - gyroBias[1];  
+    gz = (float)gyroCount[2]/16.; // - gyroBias[2];   
 
     readMagData(magCount);  // Read the x/y/z adc values   
     // Calculate the magnetometer values in milliGauss
-    mx = (float)magCount[0]/1.6 - magBias[0];  // get actual magnetometer value in mGauss 
-    my = (float)magCount[1]/1.6 - magBias[1];  
-    mz = (float)magCount[2]/1.6 - magBias[2];   
+    mx = (float)magCount[0]/1.6; // - magBias[0];  // get actual magnetometer value in mGauss 
+    my = (float)magCount[1]/1.6; // - magBias[1];  
+    mz = (float)magCount[2]/1.6; // - magBias[2];   
     
     readQuatData(quatCount);  // Read the x/y/z adc values   
     // Calculate the quaternion values  
@@ -702,8 +663,12 @@ void loop()
     if (delt_t > 500) { // update LCD once per half-second independent of read rate
     
        // check BNO-055 error status at 2 Hz rate
-    uint8_t errstat = readByte(BNO055_ADDRESS, BNO055_CALIB_STAT);
-    if(errstat == 0x01) {
+    uint8_t sysstat = readByte(BNO055_ADDRESS, BNO055_SYS_STATUS); // check system status
+    Serial.print("System Status = 0x"); Serial.println(sysstat, HEX);
+    if(sysstat == 0x05) Serial.println("Sensor fusion algorithm running");
+    if(sysstat == 0x06) Serial.println("Sensor fusion not algorithm running");
+    
+    if(sysstat == 0x01) {
       uint8_t syserr = readByte(BNO055_ADDRESS, BNO055_SYS_ERR);
       if(syserr == 0x01) Serial.println("Peripheral initialization error");
       if(syserr == 0x02) Serial.println("System initialization error");
@@ -837,7 +802,7 @@ void loop()
     Serial.print("rate = "); Serial.print((float)sumCount/sum, 2); Serial.println(" Hz");
     }
    
-    display.clearDisplay();    
+ /*  display.clearDisplay();    
  
     display.setCursor(0, 0); display.print(" x   y   z ");
 
@@ -877,7 +842,7 @@ void loop()
     display.setCursor(68, 0); display.print(9.*Temperature/5. + 32., 0); 
     display.setCursor(42, 40); display.print((float) sumCount / (1000.*sum), 2); display.print("kHz"); 
     display.display();
-
+*/
     digitalWrite(myLed, !digitalRead(myLed));
     count = millis(); 
     sumCount = 0;
@@ -961,9 +926,9 @@ void readGRVData(int16_t * destination)
 }
 
 void initBNO055() {
-   // Select BNO055 system operation mode as CONFIGMODE to configure registers
+   // Select BNO055 config mode
    writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, CONFIGMODE );
-   
+   delay(25);
    // Select page 1 to configure sensors
    writeByte(BNO055_ADDRESS, BNO055_PAGE_ID, 0x01);
    // Configure ACC
@@ -988,6 +953,8 @@ void initBNO055() {
  
    // Select BNO055 system operation mode
    writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, OPRMode );
+   delay(25);
+   
 }
 
 void accelgyroCalBNO055(float * dest1, float * dest2) 
@@ -1001,12 +968,13 @@ void accelgyroCalBNO055(float * dest1, float * dest2)
   
   // Select page 0 to read sensors
    writeByte(BNO055_ADDRESS, BNO055_PAGE_ID, 0x00);
-   // Select BNO055 system operation mode as NDOF for calibration
+   // Select BNO055 system operation mode as AMG for calibration
    writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, CONFIGMODE );
    delay(25);
-   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, NDOF );
-
- // In NDF fusion mode, accel full scale is at +/- 4g, ODR is 62.5 Hz
+   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, AMG);
+   
+ // In NDF fusion mode, accel full scale is at +/- 4g, ODR is 62.5 Hz, set it the same here
+   writeByte(BNO055_ADDRESS, BNO055_ACC_CONFIG, APwrMode << 5 | Abw << 3 | AFS_4G );
    sample_count = 256;
    for(ii = 0; ii < sample_count; ii++) {
     int16_t accel_temp[3] = {0, 0, 0};
@@ -1031,6 +999,8 @@ void accelgyroCalBNO055(float * dest1, float * dest2)
     dest1[2] = (float) accel_bias[2];          
 
  // In NDF fusion mode, gyro full scale is at +/- 2000 dps, ODR is 32 Hz
+   writeByte(BNO055_ADDRESS, BNO055_GYRO_CONFIG_0, Gbw << 3 | GFS_2000DPS );
+   writeByte(BNO055_ADDRESS, BNO055_GYRO_CONFIG_1, GPwrMode);
    for(ii = 0; ii < sample_count; ii++) {
     int16_t gyro_temp[3] = {0, 0, 0};
     readBytes(BNO055_ADDRESS, BNO055_GYR_DATA_X_LSB, 6, &data[0]);  // Read the six raw data registers into data array
@@ -1062,7 +1032,7 @@ void accelgyroCalBNO055(float * dest1, float * dest2)
   writeByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Y_MSB, ((int16_t)accel_bias[1] >> 8) & 0xFF);
   writeByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Z_LSB, (int16_t)accel_bias[2] & 0xFF);
   writeByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Z_MSB, ((int16_t)accel_bias[2] >> 8) & 0xFF);
- 
+  
   // Check that offsets were properly written to offset registers
 //  Serial.println("Average accelerometer bias = "); 
 //  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_X_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_X_LSB))); 
@@ -1091,7 +1061,7 @@ void accelgyroCalBNO055(float * dest1, float * dest2)
 
 void magCalBNO055(float * dest1) 
 {
-  uint8_t data[6]; // data array to hold accelerometer and gyro x, y, z, data
+  uint8_t data[6]; // data array to hold mag x, y, z, data
   uint16_t ii = 0, sample_count = 0;
   int32_t mag_bias[3] = {0, 0, 0};
   int16_t mag_max[3] = {0, 0, 0}, mag_min[3] = {0, 0, 0};
@@ -1101,10 +1071,10 @@ void magCalBNO055(float * dest1)
   
   // Select page 0 to read sensors
    writeByte(BNO055_ADDRESS, BNO055_PAGE_ID, 0x00);
-   // Select BNO055 system operation mode as NDOF for calibration
+   // Select BNO055 system operation mode as AMG for calibration
    writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, CONFIGMODE );
    delay(25);
-   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, NDOF );
+   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, AMG );
 
  // In NDF fusion mode, mag data is in 16 LSB/microTesla, ODR is 20 Hz in forced mode
    sample_count = 256;
@@ -1115,10 +1085,15 @@ void magCalBNO055(float * dest1)
     mag_temp[1] = (int16_t) (((int16_t)data[3] << 8) | data[2]) ;
     mag_temp[2] = (int16_t) (((int16_t)data[5] << 8) | data[4]) ;
     for (int jj = 0; jj < 3; jj++) {
-      if(mag_temp[jj] > mag_max[jj]) mag_max[jj] = mag_temp[jj];
-      if(mag_temp[jj] < mag_min[jj]) mag_min[jj] = mag_temp[jj];
+      if (ii == 0) {
+        mag_max[jj] = mag_temp[jj]; // Offsets may be large enough that mag_temp[i] may not be bipolar! 
+        mag_min[jj] = mag_temp[jj]; // This prevents max or min being pinned to 0 if the values are unipolar...
+      } else {
+        if(mag_temp[jj] > mag_max[jj]) mag_max[jj] = mag_temp[jj];
+        if(mag_temp[jj] < mag_min[jj]) mag_min[jj] = mag_temp[jj];
+      }
     }
-    delay(55);  // at 20 Hz ODR, new mag data is available every 50 ms
+    delay(105);  // at 10 Hz ODR, new mag data is available every 100 ms
    }
 
  //   Serial.println("mag x min/max:"); Serial.println(mag_max[0]); Serial.println(mag_min[0]);
@@ -1138,7 +1113,7 @@ void magCalBNO055(float * dest1)
   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, CONFIGMODE );
   delay(25);
   
-  //write biases to accelerometer offset registers as 16 LSB/microTesla
+  //write biases to magnetometer offset registers as 16 LSB/microTesla
   writeByte(BNO055_ADDRESS, BNO055_MAG_OFFSET_X_LSB, (int16_t)mag_bias[0] & 0xFF);
   writeByte(BNO055_ADDRESS, BNO055_MAG_OFFSET_X_MSB, ((int16_t)mag_bias[0] >> 8) & 0xFF);
   writeByte(BNO055_ADDRESS, BNO055_MAG_OFFSET_Y_LSB, (int16_t)mag_bias[1] & 0xFF);
@@ -1238,6 +1213,49 @@ unsigned char MS5637checkCRC(uint16_t * n_prom)  // calculate checksum from PROM
   return (n_rem ^ 0x00);
 }
 
+// I2C scan function
+
+void I2Cscan()
+{
+// scan for i2c devices
+  byte error, address;
+  int nDevices;
+
+  Serial.println("Scanning...");
+
+  nDevices = 0;
+  for(address = 1; address < 127; address++ ) 
+  {
+    // The i2c_scanner uses the return value of
+    // the Write.endTransmisstion to see if
+    // a device did acknowledge to the address.
+    Wire.beginTransmission(address);
+    error = Wire.endTransmission();
+
+    if (error == 0)
+    {
+      Serial.print("I2C device found at address 0x");
+      if (address<16) 
+        Serial.print("0");
+      Serial.print(address,HEX);
+      Serial.println("  !");
+
+      nDevices++;
+    }
+    else if (error==4) 
+    {
+      Serial.print("Unknow error at address 0x");
+      if (address<16) 
+        Serial.print("0");
+      Serial.println(address,HEX);
+    }    
+  }
+  if (nDevices == 0)
+    Serial.println("No I2C devices found\n");
+  else
+    Serial.println("done\n");
+    
+}
 
 // I2C read/write functions for the BNO055 sensor
 
