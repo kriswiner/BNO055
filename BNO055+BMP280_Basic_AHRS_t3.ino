@@ -355,22 +355,22 @@ uint8_t Posr = P_OSR_16, Tosr = T_OSR_02, Mode = normal, IIRFilter = BW0_042ODR,
 // t_fine carries fine temperature as global value for BMP280
 int32_t t_fine;
 //
-uint8_t GPwrMode = Normal;    // Gyro power mode
+uint8_t GPwrMode = NormalG;    // Gyro power mode
 uint8_t Gscale = GFS_250DPS;  // Gyro full scale
 //uint8_t Godr = GODR_250Hz;    // Gyro sample rate
 uint8_t Gbw = GBW_23Hz;       // Gyro bandwidth
 //
 uint8_t Ascale = AFS_2G;      // Accel full scale
 //uint8_t Aodr = AODR_250Hz;    // Accel sample rate
-uint8_t APwrMode = Normal;    // Accel power mode
+uint8_t APwrMode = NormalA;    // Accel power mode
 uint8_t Abw = ABW_31_25Hz;    // Accel bandwidth, accel sample rate divided by ABW_divx
 //
 //uint8_t Mscale = MFS_4Gauss;  // Select magnetometer full-scale resolution
-uint8_t MOpMode = HighAccuracy;    // Select magnetometer perfomance mode
+uint8_t MOpMode = Regular;    // Select magnetometer perfomance mode
 uint8_t MPwrMode = Normal;    // Select magnetometer power mode
 uint8_t Modr = MODR_10Hz;     // Select magnetometer ODR when in BNO055 bypass mode
 
-uint8_t PWRMode = Normal ;    // Select BNO055 power mode
+uint8_t PWRMode = Normalpwr;    // Select BNO055 power mode
 uint8_t OPRMode = NDOF;       // specify operation mode for sensors
 uint8_t status;               // BNO055 data status register
 float aRes, gRes, mRes;       // scale resolutions per LSB for the sensors
@@ -673,21 +673,21 @@ void loop()
 {  
     readAccelData(accelCount);  // Read the x/y/z adc values
     // Now we'll calculate the accleration value into actual mg's
-    ax = (float)accelCount[0] - accelBias[0];  // subtract off calculated accel bias
-    ay = (float)accelCount[1] - accelBias[1];
-    az = (float)accelCount[2] - accelBias[2]; 
+    ax = (float)accelCount[0]; // - accelBias[0];  // subtract off calculated accel bias
+    ay = (float)accelCount[1]; // - accelBias[1];
+    az = (float)accelCount[2]; // - accelBias[2]; 
 
     readGyroData(gyroCount);  // Read the x/y/z adc values
     // Calculate the gyro value into actual degrees per second
-    gx = (float)gyroCount[0]/16. - gyroBias[0];  // subtract off calculated gyro bias
-    gy = (float)gyroCount[1]/16. - gyroBias[1];  
-    gz = (float)gyroCount[2]/16. - gyroBias[2];   
+    gx = (float)gyroCount[0]/16.; // - gyroBias[0];  // subtract off calculated gyro bias
+    gy = (float)gyroCount[1]/16.; // - gyroBias[1];  
+    gz = (float)gyroCount[2]/16.; // - gyroBias[2];   
 
     readMagData(magCount);  // Read the x/y/z adc values   
     // Calculate the magnetometer values in milliGauss
-    mx = (float)magCount[0]/1.6 - magBias[0];  // get actual magnetometer value in mGauss 
-    my = (float)magCount[1]/1.6 - magBias[1];  
-    mz = (float)magCount[2]/1.6 - magBias[2];   
+    mx = (float)magCount[0]/1.6; // - magBias[0];  // get actual magnetometer value in mGauss 
+    my = (float)magCount[1]/1.6; // - magBias[1];  
+    mz = (float)magCount[2]/1.6; // - magBias[2];   
     
     readQuatData(quatCount);  // Read the x/y/z adc values   
     // Calculate the quaternion values  
@@ -738,9 +738,11 @@ void loop()
        // check BNO-055 error status at 2 Hz rate
     uint8_t sysstat = readByte(BNO055_ADDRESS, BNO055_SYS_STATUS); // check system status
     Serial.print("System Status = 0x"); Serial.println(sysstat, HEX);
+    if(sysstat == 0x05) Serial.println("Sensor fusion algorithm running");
+    if(sysstat == 0x06) Serial.println("Sensor fusion not algorithm running");
     
-    if(sysstat & 0x01) {
-      uint8_t syserr = readByte(BNO055_ADDRESS, BNO055_SYS_ERR);
+    if(sysstat == 0x01) {
+       uint8_t syserr = readByte(BNO055_ADDRESS, BNO055_SYS_ERR);
       if(syserr == 0x01) Serial.println("Peripheral initialization error");
       if(syserr == 0x02) Serial.println("System initialization error");
       if(syserr == 0x03) Serial.println("Self test result failed");
@@ -977,6 +979,9 @@ void readGRVData(int16_t * destination)
 }
 
 void initBNO055() {
+   // Select BNO055 config mode
+   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, CONFIGMODE );
+   delay(25);
    // Select page 1 to configure sensors
    writeByte(BNO055_ADDRESS, BNO055_PAGE_ID, 0x01);
    // Configure ACC
@@ -1001,7 +1006,8 @@ void initBNO055() {
  
    // Select BNO055 system operation mode
    writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, OPRMode );
-}
+   delay(25);
+  }
 
 void accelgyroCalBNO055(float * dest1, float * dest2) 
 {
@@ -1138,7 +1144,7 @@ void magCalBNO055(float * dest1)
         if(mag_temp[jj] < mag_min[jj]) mag_min[jj] = mag_temp[jj];
       }
     }
-    delay(55);  // at 20 Hz ODR, new mag data is available every 50 ms
+    delay(105);  // at 10 Hz ODR, new mag data is available every 100 ms
    }
 
  //   Serial.println("mag x min/max:"); Serial.println(mag_max[0]); Serial.println(mag_min[0]);
@@ -1173,7 +1179,8 @@ void magCalBNO055(float * dest1)
 //  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_MAG_OFFSET_Z_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_MAG_OFFSET_Z_LSB)));
   // Select BNO055 system operation mode
   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, OPRMode );
-
+  delay(25);
+  
    Serial.println("Mag Calibration done!");
 }
 
