@@ -932,7 +932,7 @@ void initBNO055() {
    // Select page 1 to configure sensors
    writeByte(BNO055_ADDRESS, BNO055_PAGE_ID, 0x01);
    // Configure ACC
-   writeByte(BNO055_ADDRESS, BNO055_ACC_CONFIG, APwrMode << 5 | Abw << 3 | Ascale );
+   writeByte(BNO055_ADDRESS, BNO055_ACC_CONFIG, APwrMode << 5 | Abw << 2 | Ascale );
    // Configure GYR
    writeByte(BNO055_ADDRESS, BNO055_GYRO_CONFIG_0, Gbw << 3 | Gscale );
    writeByte(BNO055_ADDRESS, BNO055_GYRO_CONFIG_1, GPwrMode);
@@ -974,7 +974,7 @@ void accelgyroCalBNO055(float * dest1, float * dest2)
    writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, AMG);
    
  // In NDF fusion mode, accel full scale is at +/- 4g, ODR is 62.5 Hz, set it the same here
-   writeByte(BNO055_ADDRESS, BNO055_ACC_CONFIG, APwrMode << 5 | Abw << 3 | AFS_4G );
+   writeByte(BNO055_ADDRESS, BNO055_ACC_CONFIG, APwrMode << 5 | Abw << 2 | AFS_4G );
    sample_count = 256;
    for(ii = 0; ii < sample_count; ii++) {
     int16_t accel_temp[3] = {0, 0, 0};
